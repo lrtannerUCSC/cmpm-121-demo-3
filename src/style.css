@@ -1,4 +1,4 @@
-root {
+:root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -48,6 +48,7 @@ h1 {
   height: 80vh;
 }
 
+/* Default button styling */
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -56,6 +57,7 @@ button {
   font-weight: 500;
   font-family: inherit;
   background-color: #1a1a1a;
+  color: white;
   cursor: pointer;
   transition: border-color 0.25s;
 }
@@ -69,6 +71,23 @@ button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
 }
 
+/* Popup button styling for Collect and Deposit */
+#map .leaflet-popup-content button {
+  background-color: #4caf50; /* Green background */
+  color: white; /* White text */
+  padding: 8px 16px; /* Padding for better spacing */
+  margin: 4px 0; /* Space between buttons */
+  border: none; /* Remove border */
+  border-radius: 4px; /* Slightly rounded corners */
+  cursor: pointer; /* Pointer on hover */
+  font-size: 1rem; /* Consistent font size */
+}
+
+#map .leaflet-popup-content button:hover {
+  background-color: #45a049; /* Darker green on hover */
+}
+
+/* Light mode adjustments */
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
