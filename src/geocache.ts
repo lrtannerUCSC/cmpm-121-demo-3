@@ -1,36 +1,58 @@
+// Geocache.ts
 import leaflet from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-// Define a Memento type for Geocache
-interface GeocacheMemento {
-  lat: number;
-  lng: number;
-  numCoins: number;
-}
 
 export class Geocache {
-  location: leaflet.LatLng; // Location is a leaflet LatLng object
-  numCoins: number;
+  location: leaflet.LatLng;
+  coins: string[]; // An array to hold unique coin identifiers like "i:j#serial"
 
-  constructor(location: leaflet.LatLng, numCoins: number) {
+  constructor(location: leaflet.LatLng) {
     this.location = location;
-    this.numCoins = numCoins;
+    this.coins = [];
+    this.populateCoins();
   }
 
-  // Memento pattern: Save the state of the geocache
+  // Generate coins with unique identifiers
+  populateCoins() {
+    const coinCount = Math.floor(Math.random() * 5) + 1; // Random number of coins per cache
+    for (let i = 0; i < coinCount; i++) {
+      this.coins.push(
+        `${this.location.lat.toFixed(3)}:${this.location.lng.toFixed(3)}#${i}`,
+      );
+    }
+  }
+
+  // Memento Pattern: Create the memento interface for Geocache state
   toMemento(): GeocacheMemento {
-    // Instead of saving the whole LatLng object, save its properties
-    return {
-      lat: this.location.lat,
-      lng: this.location.lng,
-      numCoins: this.numCoins,
-    };
+    return { location: this.location, coins: this.coins };
   }
 
-  // Memento pattern: Restore the state of the geocache
+  // Memento Pattern: Restore the state of the Geocache from the memento
   fromMemento(memento: GeocacheMemento): void {
-    // Recreate the LatLng object from the saved properties
-    this.location = leaflet.latLng(memento.lat, memento.lng);
-    this.numCoins = memento.numCoins;
+    this.location = memento.location;
+    this.coins = memento.coins;
   }
+
+  depositCoin(coin: string): boolean {
+    if (this.coins.indexOf(coin) === -1) {
+      this.coins.push(coin);
+      return true; // Successfully added the coin
+    }
+    return false; // Coin already exists in cache
+  }
+
+  // Remove a coin from the cache by its unique identifier
+  removeCoin(coin: string): boolean {
+    const coinIndex = this.coins.indexOf(coin);
+    if (coinIndex > -1) {
+      this.coins.splice(coinIndex, 1); // Remove the coin from the cache
+      return true;
+    }
+    return false; // Coin not found in cache
+  }
+}
+
+// Geocache Memento type
+export interface GeocacheMemento {
+  location: leaflet.LatLng;
+  coins: string[];
 }

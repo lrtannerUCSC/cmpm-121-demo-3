@@ -38,8 +38,8 @@ export class Board {
   }
 
   // Creates a Geocache at a specific location with coins
-  createGeocache(location: leaflet.LatLng, numCoins: number): Geocache {
-    return new Geocache(location, numCoins);
+  createGeocache(location: leaflet.LatLng): Geocache {
+    return new Geocache(location);
   }
 
   // Returns cells near a given point
