@@ -16,7 +16,7 @@ export class Geocache {
     const coinCount = Math.floor(Math.random() * 5) + 1; // Random number of coins per cache
     for (let i = 0; i < coinCount; i++) {
       this.coins.push(
-        `${this.location.lat.toFixed(3)}:${this.location.lng.toFixed(3)}#${i}`,
+        `${this.location.lat.toFixed(5)}:${this.location.lng.toFixed(5)}#${i}`,
       );
     }
   }

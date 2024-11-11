@@ -1,9 +1,8 @@
 import leaflet from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./style.css";
-
-// Import custom utilities
-import { Geocache } from "./geocache.ts"; // Memento pattern for cache state
+import { Cell } from "./board.ts";
+import { Geocache } from "./geocache.ts";
 
 // Define gameplay constants
 const INITIAL_LOCATION = { lat: 36.98949379578401, lng: -122.06277128548504 };
@@ -42,6 +41,9 @@ function createPlayerMarker(location: leaflet.LatLng): leaflet.Marker {
   return marker;
 }
 
+// Initialize knownTiles map for tracking geocaches by coordinates
+const knownTiles: Map<string, Geocache> = new Map(); // Use Map instead of plain object
+
 // Function to generate caches within a radius
 function generateCaches(radius: number, probability: number): void {
   for (let i = -radius; i <= radius; i++) {
@@ -52,14 +54,22 @@ function generateCaches(radius: number, probability: number): void {
           INITIAL_LOCATION.lat + i * TILE_SIZE,
           INITIAL_LOCATION.lng + j * TILE_SIZE,
         );
-        spawnCache(cacheLocation, i, j);
+
+        // Create a Cell object for the coordinates
+        const cell: Cell = { i, j };
+        const key = `${cell.i}:${cell.j}`; // Use the Cell object to generate the key
+
+        // Check if the cache already exists in knownTiles
+        if (!knownTiles.has(key)) {
+          spawnCache(cacheLocation, cell); // Pass the Cell object to spawnCache
+        }
       }
     }
   }
 }
 
 // Updated spawnCache function
-function spawnCache(location: leaflet.LatLng, _i: number, _j: number): void {
+function spawnCache(location: leaflet.LatLng, cell: Cell): void {
   // Convert LatLng object to LatLngTuple for leaflet.rectangle
   const bounds: leaflet.LatLngBoundsExpression = [
     [location.lat, location.lng],
@@ -72,6 +82,10 @@ function spawnCache(location: leaflet.LatLng, _i: number, _j: number): void {
   // Create the Geocache object
   const cache = new Geocache(location);
 
+  // Store the cache in the knownTiles map using the Cell as the key
+  const key = `${cell.i}:${cell.j}`;
+  knownTiles.set(key, cache);
+
   // Pass the Geocache object to setupCachePopup
   setupCachePopup(rect, cache);
 }
@@ -80,8 +94,8 @@ function setupCachePopup(rect: leaflet.Rectangle, geocache: Geocache): void {
   const popupDiv = document.createElement("div");
 
   // Display the cache location (i:j)
-  const cacheCoords = `${Math.floor(geocache.location.lat)}:${
-    Math.floor(geocache.location.lng)
+  const cacheCoords = `${geocache.location.lat.toFixed(5)}:${
+    geocache.location.lng.toFixed(5)
   }`;
   const coordsDiv = document.createElement("div");
   coordsDiv.textContent = `Cache: ${cacheCoords}`;
@@ -126,8 +140,8 @@ function updateCachePopup(rect: leaflet.Rectangle, geocache: Geocache): void {
   const popupDiv = document.createElement("div");
 
   // Display the cache location (i:j)
-  const cacheCoords = `${Math.floor(geocache.location.lat)}:${
-    Math.floor(geocache.location.lng)
+  const cacheCoords = `${geocache.location.lat.toFixed(5)}:${
+    geocache.location.lng.toFixed(5)
   }`;
   const coordsDiv = document.createElement("div");
   coordsDiv.textContent = `Cache: ${cacheCoords}`;

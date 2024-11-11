@@ -6,7 +6,6 @@ import { Geocache } from "./geocache.ts"; // Memento pattern for cache state
 export interface Cell {
   readonly i: number;
   readonly j: number;
-  numCoins: number; // Add the numCoins property to store the number of coins in the cell
 }
 
 export class Board {
@@ -25,7 +24,7 @@ export class Board {
     const { i, j } = cell;
     const key = `${i}:${j}`;
     if (!this.knownCells.has(key)) {
-      this.knownCells.set(key, { i, j, numCoins: 0 });
+      this.knownCells.set(key, { i, j });
     }
     return this.knownCells.get(key)!;
   }
@@ -34,7 +33,7 @@ export class Board {
   getCellForPoint(point: leaflet.LatLng): Cell {
     const i = Math.floor((point.lat - 36.98949379578401) / this.tileWidth);
     const j = Math.floor((point.lng + 122.06277128548504) / this.tileWidth);
-    return this.getCanonicalCell({ i, j, numCoins: 0 });
+    return this.getCanonicalCell({ i, j });
   }
 
   // Creates a Geocache at a specific location with coins
@@ -56,7 +55,7 @@ export class Board {
         j <= originCell.j + this.tileVisibilityRadius;
         j++
       ) {
-        resultCells.push(this.getCanonicalCell({ i, j, numCoins: 0 })); // Ensure numCoins is set
+        resultCells.push(this.getCanonicalCell({ i, j })); // Ensure numCoins is set
       }
     }
     return resultCells;
