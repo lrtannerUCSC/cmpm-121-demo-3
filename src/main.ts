@@ -1,10 +1,10 @@
-// @deno-types="npm:@types/leaflet@^1.9.14"
 import leaflet from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./style.css";
 
 // Import custom utilities
 import luck from "./luck.ts"; // RNG module
+import { Geocache } from "./geocache.ts"; // Memento pattern for cache state
 
 // Define gameplay constants
 const INITIAL_LOCATION = { lat: 36.98949379578401, lng: -122.06277128548504 };
@@ -55,7 +55,8 @@ function updateStatusPanel() {
 function generateCaches(radius: number, probability: number): void {
   for (let i = -radius; i <= radius; i++) {
     for (let j = -radius; j <= radius; j++) {
-      if (luck([i, j].toString()) < probability) { // Deterministic RNG
+      const probabilityCheck = Math.random(); // Using Math.random() for randomness
+      if (probabilityCheck < probability) {
         const cacheLocation = leaflet.latLng(
           INITIAL_LOCATION.lat + i * TILE_SIZE,
           INITIAL_LOCATION.lng + j * TILE_SIZE,
@@ -66,7 +67,7 @@ function generateCaches(radius: number, probability: number): void {
   }
 }
 
-// Function to create a cache at a specific location
+// Updated spawnCache function
 function spawnCache(location: leaflet.LatLng, i: number, j: number): void {
   // Convert LatLng object to LatLngTuple for leaflet.rectangle
   const bounds: leaflet.LatLngBoundsExpression = [
@@ -77,33 +78,40 @@ function spawnCache(location: leaflet.LatLng, i: number, j: number): void {
   const rect = leaflet.rectangle(bounds, { color: "#28a745", weight: 1 });
   rect.addTo(map);
 
-  const coinCount = Math.floor(luck([i, j, "initialCoins"].toString()) * 10) +
-    1;
-  setupCachePopup(rect, coinCount);
+  // Create the Geocache object
+  const cache = new Geocache(
+    location,
+    Math.floor(luck([i, j, "initialCoins"].toString()) * 10) + 1,
+  );
+
+  // Pass the Geocache object to setupCachePopup
+  setupCachePopup(rect, cache);
 }
 
-// Function to set up a cache popup for collecting and depositing coins
-function setupCachePopup(rect: leaflet.Rectangle, coins: number): void {
+// Updated setupCachePopup function to handle Geocache object
+function setupCachePopup(rect: leaflet.Rectangle, cache: Geocache): void {
   const popupDiv = document.createElement("div");
   popupDiv.innerHTML = `
-    <div>Coins available: <span id="coin-count">${coins}</span></div>
+    <div>Coins available: <span id="coin-count">${cache.numCoins}</span></div>
     <button id="collect-btn">Collect</button>
     <button id="deposit-btn">Deposit</button>
   `;
 
+  // Handling the coin collection logic
   popupDiv.querySelector("#collect-btn")?.addEventListener("click", () => {
-    if (coins > 0) {
-      coins--;
-      playerCoins++;
-      updatePopupAndStatus(popupDiv, coins);
+    if (cache.numCoins > 0) {
+      cache.numCoins--; // Collect one coin from cache
+      playerCoins++; // Increase the player's coins
+      updatePopupAndStatus(popupDiv, cache);
     }
   });
 
+  // Handling the coin deposit logic
   popupDiv.querySelector("#deposit-btn")?.addEventListener("click", () => {
     if (playerCoins > 0) {
-      coins++;
-      playerCoins--;
-      updatePopupAndStatus(popupDiv, coins);
+      cache.numCoins++; // Deposit one coin into the cache
+      playerCoins--; // Decrease the player's coins
+      updatePopupAndStatus(popupDiv, cache);
     }
   });
 
@@ -111,8 +119,9 @@ function setupCachePopup(rect: leaflet.Rectangle, coins: number): void {
 }
 
 // Function to update the popup display and player status panel
-function updatePopupAndStatus(popupDiv: HTMLElement, coins: number) {
-  popupDiv.querySelector("#coin-count")!.textContent = coins.toString();
+function updatePopupAndStatus(popupDiv: HTMLElement, cache: Geocache) {
+  popupDiv.querySelector("#coin-count")!.textContent = cache.numCoins
+    .toString();
   updateStatusPanel();
 }
 
