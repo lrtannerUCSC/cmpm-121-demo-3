@@ -102,3 +102,33 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+#controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: fixed;
+  bottom: 20px;
+  width: 100%;
+}
+
+#controls button {
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  padding: 10px;
+  margin: 5px;
+  font-size: 18px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+#controls button:active {
+  background-color: #45a049;
+}
+
+.horizontal-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+}

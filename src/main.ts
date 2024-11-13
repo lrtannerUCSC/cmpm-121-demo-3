@@ -29,7 +29,7 @@ leaflet.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // Initialize player marker and status
-const _playerMarker = createPlayerMarker(
+const playerMarker = createPlayerMarker(
   leaflet.latLng(INITIAL_LOCATION.lat, INITIAL_LOCATION.lng),
 );
 
@@ -41,29 +41,150 @@ function createPlayerMarker(location: leaflet.LatLng): leaflet.Marker {
   return marker;
 }
 
+// Create control buttons for movement
+function createMovementControls(): void {
+  const controlsDiv = document.createElement("div");
+  controlsDiv.id = "controls";
+  controlsDiv.style.display = "flex";
+  controlsDiv.style.flexDirection = "column";
+  controlsDiv.style.alignItems = "center";
+  controlsDiv.style.position = "fixed";
+  controlsDiv.style.bottom = "20px";
+  controlsDiv.style.width = "100%";
+
+  // Create the "up" button
+  const btnUp = document.createElement("button");
+  btnUp.textContent = "↑";
+  btnUp.id = "btn-up";
+  styleButton(btnUp);
+
+  // Create the "down" button
+  const btnDown = document.createElement("button");
+  btnDown.textContent = "↓";
+  btnDown.id = "btn-down";
+  styleButton(btnDown);
+
+  // Create the "left" button
+  const btnLeft = document.createElement("button");
+  btnLeft.textContent = "←";
+  btnLeft.id = "btn-left";
+  styleButton(btnLeft);
+
+  // Create the "right" button
+  const btnRight = document.createElement("button");
+  btnRight.textContent = "→";
+  btnRight.id = "btn-right";
+  styleButton(btnRight);
+
+  // Arrange buttons in layout
+  controlsDiv.appendChild(btnUp);
+
+  const horizontalButtons = document.createElement("div");
+  horizontalButtons.style.display = "flex";
+  horizontalButtons.style.justifyContent = "center";
+  horizontalButtons.style.gap = "5px";
+
+  horizontalButtons.appendChild(btnLeft);
+  horizontalButtons.appendChild(btnDown);
+  horizontalButtons.appendChild(btnRight);
+  controlsDiv.appendChild(horizontalButtons);
+
+  document.body.appendChild(controlsDiv);
+
+  // Add event listeners to handle movement
+  btnUp.addEventListener("click", () => movePlayer("up"));
+  btnDown.addEventListener("click", () => movePlayer("down"));
+  btnLeft.addEventListener("click", () => movePlayer("left"));
+  btnRight.addEventListener("click", () => movePlayer("right"));
+}
+
+// Helper function to style buttons
+function styleButton(button: HTMLButtonElement): void {
+  button.style.backgroundColor = "#4CAF50";
+  button.style.color = "white";
+  button.style.border = "none";
+  button.style.padding = "10px";
+  button.style.margin = "5px";
+  button.style.fontSize = "18px";
+  button.style.borderRadius = "5px";
+  button.style.cursor = "pointer";
+}
+
+let currentLocation = playerMarker.getLatLng();
+// Function to move the player in a specified direction
+function movePlayer(direction: "up" | "down" | "left" | "right"): void {
+  currentLocation = playerMarker.getLatLng();
+
+  let newLocation;
+  switch (direction) {
+    case "up":
+      newLocation = leaflet.latLng(
+        currentLocation.lat + TILE_SIZE,
+        currentLocation.lng,
+      );
+      break;
+    case "down":
+      newLocation = leaflet.latLng(
+        currentLocation.lat - TILE_SIZE,
+        currentLocation.lng,
+      );
+      break;
+    case "left":
+      newLocation = leaflet.latLng(
+        currentLocation.lat,
+        currentLocation.lng - TILE_SIZE,
+      );
+      break;
+    case "right":
+      newLocation = leaflet.latLng(
+        currentLocation.lat,
+        currentLocation.lng + TILE_SIZE,
+      );
+      break;
+  }
+
+  // Update the player's location on the map
+  playerMarker.setLatLng(newLocation);
+  map.setView(newLocation);
+
+  // Regenerate caches based on the new player location
+  generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
+}
+
+// Call the function to create movement controls when the game loads
+createMovementControls();
+
 // Initialize knownTiles map for tracking geocaches by coordinates
 const knownTiles: Map<string, Geocache> = new Map(); // Use Map instead of plain object
 
-// Function to generate caches within a radius
+// Initialize a Set to store discovered cells by coordinates
+const discoveredCells: Set<string> = new Set();
+
 function generateCaches(radius: number, probability: number): void {
   for (let i = -radius; i <= radius; i++) {
     for (let j = -radius; j <= radius; j++) {
-      const probabilityCheck = Math.random(); // Using Math.random() for randomness
-      if (probabilityCheck < probability) {
-        const cacheLocation = leaflet.latLng(
-          INITIAL_LOCATION.lat + i * TILE_SIZE,
-          INITIAL_LOCATION.lng + j * TILE_SIZE,
-        );
+      // Calculate absolute coordinates for this cell
+      const cellLat = currentLocation.lat + i * TILE_SIZE;
+      const cellLng = currentLocation.lng + j * TILE_SIZE;
+      const key = `${cellLat.toFixed(5)}:${cellLng.toFixed(5)}`; // Unique key with precise lat/lng
 
-        // Create a Cell object for the coordinates
-        const cell: Cell = { i, j };
-        const key = `${cell.i}:${cell.j}`; // Use the Cell object to generate the key
-
-        // Check if the cache already exists in knownTiles
-        if (!knownTiles.has(key)) {
-          spawnCache(cacheLocation, cell); // Pass the Cell object to spawnCache
-        }
+      // Skip generating caches in cells that are already discovered
+      if (discoveredCells.has(key)) {
+        console.log(`Skipping ${key} - already discovered`);
+        continue;
       }
+
+      // Only spawn cache based on probability
+      if (Math.random() < probability) {
+        const cacheLocation = leaflet.latLng(cellLat, cellLng);
+        console.log(`Spawning cache at ${key}`);
+        spawnCache(cacheLocation, { i, j });
+      } else {
+        console.log(`No cache spawned at ${key}`);
+      }
+
+      // Mark cell as discovered
+      discoveredCells.add(key);
     }
   }
 }
