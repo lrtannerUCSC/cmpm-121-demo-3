@@ -1,9 +1,12 @@
 import leaflet from "leaflet";
 
 // Geocache interface to define a geocache's properties and methods
+// Example Geocache structure - Add a rectangle property if needed
 export interface Geocache {
   location: leaflet.LatLng;
-  coins: string[]; // Array of unique coin identifiers
+  coins: string[];
+  rectangle?: leaflet.Rectangle; // Optional rectangle property
+  visible?: boolean; // Track visibility state
 }
 
 // Function to create a new geocache
