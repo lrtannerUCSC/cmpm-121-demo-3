@@ -1,9 +1,11 @@
 import leaflet from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./style.css";
-import { Cell } from "./board.ts";
-import { Geocache } from "./geocache.ts";
-
+import { Cell } from "./board.ts"; // Assuming Cell is an object or interface now
+import { Geocache } from "./geocache.ts"; // Assuming Geocache is now a function or object
+import { createGeocache } from "./geocache.ts"; // Import the createGeocache function
+import { removeCoin } from "./geocache.ts";
+import { receiveCoin } from "./geocache.ts";
 // Define gameplay constants
 const INITIAL_LOCATION = { lat: 36.98949379578401, lng: -122.06277128548504 };
 const TILE_SIZE = 0.0001;
@@ -154,6 +156,9 @@ function movePlayer(direction: "up" | "down" | "left" | "right"): void {
 // Call the function to create movement controls when the game loads
 createMovementControls();
 
+// Array to hold the player's collected coins
+const playerInventory: string[] = [];
+
 // Initialize knownTiles map for tracking geocaches by coordinates
 const knownTiles: Map<string, Geocache> = new Map(); // Use Map instead of plain object
 
@@ -189,6 +194,8 @@ function generateCaches(radius: number, probability: number): void {
   }
 }
 
+generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
+
 // Updated spawnCache function
 function spawnCache(location: leaflet.LatLng, cell: Cell): void {
   // Convert LatLng object to LatLngTuple for leaflet.rectangle
@@ -201,7 +208,7 @@ function spawnCache(location: leaflet.LatLng, cell: Cell): void {
   rect.addTo(map);
 
   // Create the Geocache object
-  const cache = new Geocache(location);
+  const cache = createGeocache(location); // Changed to use the function-based Geocache creation
 
   // Store the cache in the knownTiles map using the Cell as the key
   const key = `${cell.i}:${cell.j}`;
@@ -214,7 +221,7 @@ function spawnCache(location: leaflet.LatLng, cell: Cell): void {
 function setupCachePopup(rect: leaflet.Rectangle, geocache: Geocache): void {
   const popupDiv = document.createElement("div");
 
-  // Display the cache location (i:j)
+  // Display cache location
   const cacheCoords = `${geocache.location.lat.toFixed(5)}:${
     geocache.location.lng.toFixed(5)
   }`;
@@ -222,99 +229,50 @@ function setupCachePopup(rect: leaflet.Rectangle, geocache: Geocache): void {
   coordsDiv.textContent = `Cache: ${cacheCoords}`;
   popupDiv.appendChild(coordsDiv);
 
-  // List coins in the cache with unique identifiers
+  // Display coins in the cache with "Collect" buttons
   const coinsListDiv = document.createElement("div");
-  coinsListDiv.innerHTML = `<strong>Inventory:</strong>`;
+  coinsListDiv.innerHTML = "<strong>Coins in Cache:</strong>";
   geocache.coins.forEach((coin) => {
     const coinDiv = document.createElement("div");
     coinDiv.textContent = `Coin ID: ${coin}`;
+
     const collectButton = document.createElement("button");
     collectButton.textContent = "Collect";
-    // Pass rect and geocache to collectCoin function
     collectButton.addEventListener(
       "click",
       () => collectCoin(geocache, coin, rect),
     );
     coinDiv.appendChild(collectButton);
+
     coinsListDiv.appendChild(coinDiv);
   });
-
   popupDiv.appendChild(coinsListDiv);
 
-  // Add Deposit button if the user has coins in inventory
-  const depositButtonDiv = document.createElement("div");
-  depositButtonDiv.innerHTML = "";
-
-  // Show the Deposit button only if the player has coins
+  // Add a single "Deposit" button for the cache
   const depositButton = document.createElement("button");
   depositButton.textContent = "Deposit Coin";
   depositButton.addEventListener("click", () => depositCoin(geocache, rect));
-  depositButtonDiv.appendChild(depositButton);
+  popupDiv.appendChild(depositButton);
 
-  popupDiv.appendChild(depositButtonDiv);
-
-  // Add the popup to the rectangle
   rect.bindPopup(popupDiv);
 }
 
-function updateCachePopup(rect: leaflet.Rectangle, geocache: Geocache): void {
-  const popupDiv = document.createElement("div");
-
-  // Display the cache location (i:j)
-  const cacheCoords = `${geocache.location.lat.toFixed(5)}:${
-    geocache.location.lng.toFixed(5)
-  }`;
-  const coordsDiv = document.createElement("div");
-  coordsDiv.textContent = `Cache: ${cacheCoords}`;
-  popupDiv.appendChild(coordsDiv);
-
-  // List coins in the cache with unique identifiers
-  const coinsListDiv = document.createElement("div");
-  coinsListDiv.innerHTML = `<strong>Coins in Cache:</strong>`;
-  geocache.coins.forEach((coin) => {
-    const coinDiv = document.createElement("div");
-    coinDiv.textContent = `Coin ID: ${coin}`;
-
-    // Collect button
-    const collectButton = document.createElement("button");
-    collectButton.textContent = "Collect";
-    collectButton.addEventListener(
-      "click",
-      () => collectCoin(geocache, coin, rect),
-    );
-    coinDiv.appendChild(collectButton);
-    coinsListDiv.appendChild(coinDiv);
-  });
-
-  popupDiv.appendChild(coinsListDiv);
-
-  // Add Deposit button if the user has coins in inventory
-  const depositDiv = document.createElement("div");
-
-  // Create a button to deposit the topmost coin from the user's inventory
-  const depositButton = document.createElement("button");
-  depositButton.textContent = "Deposit Coin";
-  depositButton.addEventListener("click", () => depositCoin(geocache, rect)); // Automatically deposit topmost coin
-  depositDiv.appendChild(depositButton);
-  popupDiv.appendChild(depositDiv);
-  // Set the new content for the existing popup without closing it
-  rect.getPopup()?.setContent(popupDiv);
-}
-
-function collectCoin(cache: Geocache, coin: string, rect: leaflet.Rectangle) {
-  // Remove the coin from the cache
-  const isRemoved = cache.removeCoin(coin);
+// Modify collectCoin in main.ts
+function collectCoin(
+  geocache: Geocache,
+  coin: string,
+  rect: leaflet.Rectangle,
+) {
+  const isRemoved = removeCoin(geocache, coin); // Call the removeCoin function
 
   if (isRemoved) {
-    // Add the coin to the user's inventory
-    playerInventory.push(coin);
+    playerInventory.push(coin); // Add coin to inventory
     console.log(`Collected coin ${coin}`);
-
-    // Update the popup content without closing the popup
-    updateCachePopup(rect, cache);
+    updateCachePopup(rect, geocache); // Refresh popup content to reflect coin removal
   } else {
     console.log(`Coin ${coin} not found in the cache.`);
   }
+
   updatePopupAndStatus();
   updateInventoryDisplay();
 }
@@ -325,8 +283,7 @@ function depositCoin(geocache: Geocache, rect: leaflet.Rectangle): void {
     const coinToDeposit = playerInventory.pop(); // Remove the last coin from the inventory
 
     if (coinToDeposit) {
-      // Add the coin to the cache
-      const isDeposited = geocache.depositCoin(coinToDeposit);
+      const isDeposited = receiveCoin(geocache, coinToDeposit);
       if (isDeposited) {
         console.log(`Deposited coin ${coinToDeposit}`);
         updateCachePopup(rect, geocache); // Update the popup after depositing
@@ -340,11 +297,20 @@ function depositCoin(geocache: Geocache, rect: leaflet.Rectangle): void {
   }
 }
 
-const playerInventory: string[] = []; // Array to track the coins the player has collected
+// Updates any additional status or UI elements related to the popup
+function updatePopupAndStatus(): void {
+  // Implement as needed, such as refreshing the popup to show updated coin status
+  console.log("Popup and status updated.");
+}
 
+// Updates the player's inventory display on the UI
 function updateInventoryDisplay(): void {
-  const inventoryDiv = document.getElementById("inventory")!;
-  inventoryDiv.innerHTML = `<strong>Your Inventory:</strong>`;
+  const inventoryDiv = document.getElementById("inventory");
+  if (!inventoryDiv) {
+    console.warn("Inventory display element not found.");
+    return;
+  }
+  inventoryDiv.innerHTML = "<strong>Player Inventory:</strong>";
   playerInventory.forEach((coin) => {
     const coinDiv = document.createElement("div");
     coinDiv.textContent = `Coin ID: ${coin}`;
@@ -352,10 +318,51 @@ function updateInventoryDisplay(): void {
   });
 }
 
-function updatePopupAndStatus(): void {
-  // Update other UI elements if necessary (like coin counts)
-  updateInventoryDisplay();
+function updateCachePopup(rect: leaflet.Rectangle, cache: Geocache): void {
+  // Rebuild the popup content to show updated cache and inventory status
+  const popupDiv = document.createElement("div");
+
+  // Cache location
+  const cacheCoords = `${cache.location.lat.toFixed(5)}:${
+    cache.location.lng.toFixed(5)
+  }`;
+  const coordsDiv = document.createElement("div");
+  coordsDiv.textContent = `Cache: ${cacheCoords}`;
+  popupDiv.appendChild(coordsDiv);
+
+  // Display coins in cache
+  if (cache.coins.length > 0) {
+    const coinsListDiv = document.createElement("div");
+    coinsListDiv.innerHTML = "<strong>Coins in Cache:</strong>";
+    cache.coins.forEach((coin) => {
+      const coinDiv = document.createElement("div");
+      coinDiv.textContent = `Coin ID: ${coin}`;
+
+      const collectButton = document.createElement("button");
+      collectButton.textContent = "Collect";
+      collectButton.addEventListener(
+        "click",
+        () => collectCoin(cache, coin, rect),
+      );
+      coinDiv.appendChild(collectButton);
+
+      coinsListDiv.appendChild(coinDiv);
+    });
+    popupDiv.appendChild(coinsListDiv);
+  } else {
+    popupDiv.innerHTML += "<div>No coins in cache.</div>";
+  }
+
+  // Single "Deposit" button
+  const depositButton = document.createElement("button");
+  depositButton.textContent = "Deposit Coin";
+  depositButton.addEventListener("click", () => depositCoin(cache, rect));
+  popupDiv.appendChild(depositButton);
+
+  rect.bindPopup(popupDiv).openPopup(); // Re-open popup to display updated content
 }
 
-// Generate caches around the player
-generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
+//NEED TO FIX COLLECTION AND DEPOSITION, RIGHT NOW IT DELETES CACHE WHEN
+//PICK UP COIN AND ALSO NO DEPOSIT BUTTON
+//AND ALSO COINS DONT GO IN INVENTORY
+//INVENOTRY MIGHT NOT EVEN EXIST ANYMORE??
