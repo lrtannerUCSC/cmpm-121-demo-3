@@ -126,6 +126,7 @@ function movePlayer(direction: "up" | "down" | "left" | "right"): void {
         currentLocation.lat + TILE_SIZE,
         currentLocation.lng,
         updateCacheVisibility(),
+        updatePlayerRadiusVisualization(),
       );
       break;
     case "down":
@@ -133,6 +134,7 @@ function movePlayer(direction: "up" | "down" | "left" | "right"): void {
         currentLocation.lat - TILE_SIZE,
         currentLocation.lng,
         updateCacheVisibility(),
+        updatePlayerRadiusVisualization(),
       );
       break;
     case "left":
@@ -140,6 +142,7 @@ function movePlayer(direction: "up" | "down" | "left" | "right"): void {
         currentLocation.lat,
         currentLocation.lng - TILE_SIZE,
         updateCacheVisibility(),
+        updatePlayerRadiusVisualization(),
       );
       break;
     case "right":
@@ -147,6 +150,7 @@ function movePlayer(direction: "up" | "down" | "left" | "right"): void {
         currentLocation.lat,
         currentLocation.lng + TILE_SIZE,
         updateCacheVisibility(),
+        updatePlayerRadiusVisualization(),
       );
       break;
   }
@@ -175,26 +179,39 @@ const cellState: Map<string, { discovered: boolean; cache?: Geocache }> =
 
 // Modify generateCaches to work with cellState
 function generateCaches(radius: number, probability: number): void {
+  // Function to calculate the Euclidean distance from the center
+  const isWithinRadius = (i: number, j: number): boolean => {
+    const distance = Math.sqrt(i * i + j * j);
+    return distance <= radius; // Only return true if the point is within the radius
+  };
+
   for (let i = -radius; i <= radius; i++) {
     for (let j = -radius; j <= radius; j++) {
+      // Check if the point is within the circular radius
+      if (!isWithinRadius(i, j)) {
+        continue; // Skip if the point is outside the radius
+      }
+
       const cellLat = currentLocation.lat + i * TILE_SIZE;
       const cellLng = currentLocation.lng + j * TILE_SIZE;
       const key = `${cellLat.toFixed(5)}:${cellLng.toFixed(5)}`;
 
-      // Check if the cell has already been discovered
+      // Check if the cell has already been discovered (and thus no cache should be generated)
       if (cellState.has(key) && cellState.get(key)?.discovered) {
         continue; // Skip already discovered cells
       }
 
-      // Mark the cell as discovered
-      cellState.set(key, { discovered: true });
+      // Mark the cell as discovered only if it's not already discovered
+      if (!cellState.has(key)) {
+        cellState.set(key, { discovered: true });
+      }
 
       // Only spawn cache based on probability
       if (Math.random() < probability) {
         const cacheLocation = leaflet.latLng(cellLat, cellLng);
         const cache = createGeocache(cacheLocation);
 
-        // Store cache in cellState once
+        // Store cache in cellState
         cellState.set(key, { discovered: true, cache });
 
         // Spawn the cache on the map
@@ -418,23 +435,23 @@ function updateCacheVisibility(): void {
 }
 
 // Create a circle to visualize the player's radius range
-//let playerRadiusCircle: leaflet.Circle;
+let playerRadiusCircle: leaflet.Circle;
 
 // Function to add or update the player's radius visualization
-// function updatePlayerRadiusVisualization(): void {
-//   // If the circle already exists, update its position
-//   if (playerRadiusCircle) {
-//     playerRadiusCircle.setLatLng(currentLocation); // Update position to current player location
-//   } else {
-//     // Create the circle with the given radius in meters (CACHE_SPAWN_RADIUS_METERS)
-//     playerRadiusCircle = leaflet.circle(currentLocation, {
-//       color: "#FF0000", // Red color for the circle
-//       fillColor: "#FF0000", // Red fill
-//       fillOpacity: 0.2, // Semi-transparent
-//       radius: CACHE_SPAWN_RADIUS_METERS, // Radius in meters
-//     }).addTo(map);
-//   }
-// }
+function updatePlayerRadiusVisualization(): void {
+  // If the circle already exists, update its position
+  if (playerRadiusCircle) {
+    playerRadiusCircle.setLatLng(currentLocation); // Update position to current player location
+  } else {
+    // Create the circle with the given radius in meters (CACHE_SPAWN_RADIUS_METERS)
+    playerRadiusCircle = leaflet.circle(currentLocation, {
+      color: "#FF0000", // Red color for the circle
+      fillColor: "#FF0000", // Red fill
+      fillOpacity: 0.2, // Semi-transparent
+      radius: CACHE_SPAWN_RADIUS_METERS, // Radius in meters
+    }).addTo(map);
+  }
+}
 
 // Call the function to update the player's radius visualization
-////updatePlayerRadiusVisualization();
+updatePlayerRadiusVisualization();
