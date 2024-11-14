@@ -50,7 +50,12 @@ export function removeCoin(geocache: Geocache, coin: string): boolean {
 
 // Memento Pattern: Create the memento interface for Geocache state
 export function toMemento(geocache: Geocache): GeocacheMemento {
-  return { location: geocache.location, coins: geocache.coins };
+  return {
+    location: geocache.location,
+    coins: [...geocache.coins], // Create a copy to avoid external mutation
+    visible: geocache.visible,
+    rectangle: geocache.rectangle,
+  };
 }
 
 // Memento Pattern: Restore the state of the Geocache from the memento
@@ -59,11 +64,15 @@ export function fromMemento(
   memento: GeocacheMemento,
 ): void {
   geocache.location = memento.location;
-  geocache.coins = memento.coins;
+  geocache.coins = [...memento.coins]; // Restore coin list
+  geocache.visible = memento.visible;
+  geocache.rectangle = memento.rectangle; // Restore the rectangle if it exists
 }
 
 // Geocache Memento type
 export interface GeocacheMemento {
   location: leaflet.LatLng;
   coins: string[];
+  visible?: boolean; // Add visibility state to the memento
+  rectangle?: leaflet.Rectangle; // Optionally save the rectangle for rendering
 }

@@ -4,7 +4,13 @@ import "./style.css";
 import { Cell } from "./board.ts"; // Assuming Cell is an object or interface now
 import { removeCoin } from "./geocache.ts";
 import { receiveCoin } from "./geocache.ts";
-import { createGeocache, Geocache } from "./geocache.ts";
+import {
+  createGeocache,
+  fromMemento,
+  Geocache,
+  GeocacheMemento,
+  toMemento,
+} from "./geocache.ts";
 
 // Define gameplay constants
 const INITIAL_LOCATION = { lat: 36.98949379578401, lng: -122.06277128548504 };
@@ -174,8 +180,10 @@ createMovementControls();
 const playerInventory: string[] = [];
 
 // Consolidated cell state map
-const cellState: Map<string, { discovered: boolean; cache?: Geocache }> =
-  new Map();
+const cellState: Map<
+  string,
+  { discovered: boolean; cache?: Geocache; memento?: GeocacheMemento }
+> = new Map();
 
 // Modify generateCaches to work with cellState
 function generateCaches(radius: number, probability: number): void {
@@ -212,7 +220,8 @@ function generateCaches(radius: number, probability: number): void {
         const cache = createGeocache(cacheLocation);
 
         // Store cache in cellState
-        cellState.set(key, { discovered: true, cache });
+        const memento = toMemento(cache);
+        cellState.set(key, { discovered: true, cache, memento });
 
         // Spawn the cache on the map
         spawnCache(cacheLocation, { i, j }, cache);
@@ -243,7 +252,11 @@ function spawnCache(
   const key = `${cellLat}:${cellLng}`;
 
   // Store cache in the cell state
-  cellState.set(key, { discovered: true, cache });
+  const cacheState = cellState.get(key);
+  if (cacheState && cacheState.memento) {
+    fromMemento(cache, cacheState.memento);
+    cache.rectangle?.addTo(map); // Re-add the rectangle if it was visible before
+  }
 
   setupCachePopup(rect, cache);
 }
