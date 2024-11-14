@@ -2,13 +2,13 @@ import leaflet from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./style.css";
 import { Cell } from "./board.ts"; // Assuming Cell is an object or interface now
-import { removeCoin } from "./geocache.ts";
-import { receiveCoin } from "./geocache.ts";
 import {
   createGeocache,
   fromMemento,
   Geocache,
   GeocacheMemento,
+  receiveCoin,
+  removeCoin,
   toMemento,
 } from "./geocache.ts";
 
@@ -230,6 +230,7 @@ function generateCaches(radius: number, probability: number): void {
   }
 }
 
+generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
 // Simplified spawnCache function
 function spawnCache(
   location: leaflet.LatLng,
@@ -300,7 +301,6 @@ function setupCachePopup(rect: leaflet.Rectangle, geocache: Geocache): void {
   rect.bindPopup(popupDiv);
 }
 
-// Modify collectCoin in main.ts
 function collectCoin(
   geocache: Geocache,
   coin: string,
@@ -310,13 +310,10 @@ function collectCoin(
 
   if (isRemoved) {
     playerInventory.push(coin); // Add coin to inventory
-    //console.log(`Collected coin ${coin}`);
+
     updateCachePopup(rect, geocache); // Refresh popup content to reflect coin removal
-  } else {
-    //console.log(`Coin ${coin} not found in the cache.`);
   }
 
-  updatePopupAndStatus();
   updateInventoryDisplay();
 }
 
@@ -328,25 +325,14 @@ function depositCoin(geocache: Geocache, rect: leaflet.Rectangle): void {
     if (coinToDeposit) {
       const isDeposited = receiveCoin(geocache, coinToDeposit);
       if (isDeposited) {
-        //console.log(`Deposited coin ${coinToDeposit}`);
         updateCachePopup(rect, geocache); // Update the popup after depositing
         updateInventoryDisplay(); // Update the inventory display after depositing
-      } else {
-        //console.log(`Failed to deposit coin ${coinToDeposit}`);
       }
     }
-  } else {
-    //console.log("No coins to deposit.");
   }
 }
 
 // Updates any additional status or UI elements related to the popup
-function updatePopupAndStatus(): void {
-  // Implement as needed, such as refreshing the popup to show updated coin status
-  //console.log("Popup and status updated.");
-}
-
-// Updates the player's inventory display on the UI
 function updateInventoryDisplay(): void {
   const inventoryDiv = document.getElementById("inventory");
   if (!inventoryDiv) {
@@ -408,21 +394,18 @@ function updateCachePopup(rect: leaflet.Rectangle, cache: Geocache): void {
 // Function to check if the cache is within the spawn radius using Leaflet's distanceTo method
 function isCacheWithinSpawnRadius(cacheLocation: leaflet.LatLng): boolean {
   const distance = currentLocation.distanceTo(cacheLocation); // Get the distance in meters
-  console.log("distance: ", distance);
   return distance <= CACHE_SPAWN_RADIUS_METERS; // Check if the cache is within the radius
 }
 
 function updateCacheVisibility(): void {
   // Iterate through each entry in the cellState map
   cellState.forEach((cell, cellId) => {
-    console.log(cell);
     // Check if the cache exists and whether it's within the spawn radius
     const isInRange = cell.cache
       ? isCacheWithinSpawnRadius(cell.cache.location)
       : false;
 
     // Log the cache position and whether it's in range
-    console.log(`Checking cache at ${cellId}. In range: ${isInRange}`);
 
     // If the cache is discovered and is within range, make sure its rectangle is added to the map
     if (isInRange && cell.discovered && cell.cache) {
@@ -430,7 +413,6 @@ function updateCacheVisibility(): void {
 
       // Only add the rectangle to the map if it isn't already there and it's not null
       if (cache.rectangle && !cache.rectangle._map) {
-        console.log(`Cache at ${cellId} is now visible. Adding rectangle.`);
         cache.rectangle.addTo(map); // Add the rectangle to the map
         cache.visible = true; // Update visibility state
       }
@@ -447,24 +429,58 @@ function updateCacheVisibility(): void {
   });
 }
 
-// Create a circle to visualize the player's radius range
-let playerRadiusCircle: leaflet.Circle;
+// Add a variable to track the player radius visibility
+let playerRadiusVisible = true;
+let playerRadiusCircle: leaflet.Circle | null = null;
 
-// Function to add or update the player's radius visualization
-function updatePlayerRadiusVisualization(): void {
-  // If the circle already exists, update its position
+// Function to create the toggle button for player radius visibility
+function createRadiusToggleButton(): void {
+  const toggleButton = document.createElement("button");
+  toggleButton.textContent = "Toggle Player Radius";
+  toggleButton.style.backgroundColor = "#FF6347";
+  toggleButton.style.color = "white";
+  toggleButton.style.border = "none";
+  toggleButton.style.padding = "10px";
+  toggleButton.style.margin = "5px";
+  toggleButton.style.fontSize = "18px";
+  toggleButton.style.borderRadius = "5px";
+  toggleButton.style.cursor = "pointer";
+  toggleButton.addEventListener("click", togglePlayerRadius);
+
+  // Add the toggle button to the controls div
+  const controlsDiv = document.getElementById("controls");
+  if (controlsDiv) {
+    controlsDiv.appendChild(toggleButton);
+  }
+}
+
+// Toggle the visibility of the player's radius circle
+function togglePlayerRadius(): void {
+  playerRadiusVisible = !playerRadiusVisible;
   if (playerRadiusCircle) {
-    playerRadiusCircle.setLatLng(currentLocation); // Update position to current player location
+    if (playerRadiusVisible) {
+      playerRadiusCircle.addTo(map); // Show the radius circle
+    } else {
+      playerRadiusCircle.remove(); // Hide the radius circle
+    }
+  }
+}
+
+// Update the function to visualize the player radius when moving
+function updatePlayerRadiusVisualization(): void {
+  if (playerRadiusCircle) {
+    playerRadiusCircle.setLatLng(currentLocation);
   } else {
-    // Create the circle with the given radius in meters (CACHE_SPAWN_RADIUS_METERS)
+    // Create a new circle if it doesn't exist
     playerRadiusCircle = leaflet.circle(currentLocation, {
-      color: "#FF0000", // Red color for the circle
-      fillColor: "#FF0000", // Red fill
-      fillOpacity: 0.2, // Semi-transparent
-      radius: CACHE_SPAWN_RADIUS_METERS, // Radius in meters
+      radius: CACHE_SPAWN_RADIUS_METERS,
+      color: "blue",
+      weight: 1,
+      opacity: 0.5,
+      fillOpacity: 0.1,
     }).addTo(map);
   }
 }
 
-// Call the function to update the player's radius visualization
-updatePlayerRadiusVisualization();
+// Call the function to create the toggle button when the game loads
+createRadiusToggleButton();
