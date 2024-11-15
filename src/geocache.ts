@@ -1,3 +1,4 @@
+//geocache.ts
 import leaflet from "leaflet";
 
 // Geocache interface to define a geocache's properties and methods

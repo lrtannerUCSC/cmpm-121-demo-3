@@ -1,4 +1,6 @@
+//main.ts
 import leaflet from "leaflet";
+import { LocationEvent } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "./style.css";
 import { Cell } from "./board.ts"; // Assuming Cell is an object or interface now
@@ -120,57 +122,174 @@ function styleButton(button: HTMLButtonElement): void {
   button.style.cursor = "pointer";
 }
 
-let currentLocation = playerMarker.getLatLng();
+const currentLocation = playerMarker.getLatLng();
 // Function to move the player in a specified direction
-function movePlayer(direction: "up" | "down" | "left" | "right"): void {
-  currentLocation = playerMarker.getLatLng();
+// Add a geolocation toggle button
+const geolocationToggle = document.createElement("button");
+geolocationToggle.style.position = "absolute";
+geolocationToggle.style.bottom = "10px"; // Adjust to "bottom-right" if needed
+geolocationToggle.style.right = "10px";
+geolocationToggle.textContent = "🌐";
+document.body.appendChild(geolocationToggle);
 
-  let newLocation;
+// Flag to track current mode
+let isGeolocationEnabled = false;
+
+// Event listener for toggling geolocation
+geolocationToggle.addEventListener("click", () => {
+  isGeolocationEnabled = !isGeolocationEnabled;
+
+  if (isGeolocationEnabled) {
+    enableLeafletGeolocation();
+  } else {
+    disableLeafletGeolocation();
+    enableDiscreteMovement();
+  }
+});
+
+// Enable Leaflet geolocation
+function enableLeafletGeolocation() {
+  console.log("Enabling Leaflet geolocation...");
+  if (map && map.locate) {
+    map.locate({ watch: true, setView: true, maxZoom: 16 });
+
+    map.on("locationfound", handleLocationFound);
+    map.on("locationerror", handleLocationError);
+  } else {
+    console.error(
+      "Leaflet geolocation unavailable. Falling back to discrete movement.",
+    );
+    enableDiscreteMovement();
+  }
+}
+
+// Disable Leaflet geolocation
+function disableLeafletGeolocation() {
+  console.log("Disabling Leaflet geolocation...");
+  map.stopLocate();
+  map.off("locationfound", handleLocationFound);
+  map.off("locationerror", handleLocationError);
+}
+
+// Handle Leaflet geolocation updates
+function handleLocationFound(e: LocationEvent) {
+  const { lat, lng } = e.latlng;
+  console.log(`Location found: ${lat}, ${lng}`);
+  updatePlayerLocation(lat, lng);
+}
+
+// Handle Leaflet geolocation errors
+function handleLocationError(e: ErrorEvent) {
+  console.error("Leaflet geolocation failed:", e.message);
+  enableDiscreteMovement();
+}
+
+// Enable discrete movement using existing buttons
+function enableDiscreteMovement() {
+  console.log("Switching to discrete movement...");
+
+  const btnUp = document.getElementById("btnUp") as HTMLButtonElement;
+  const btnDown = document.getElementById("btnDown") as HTMLButtonElement;
+  const btnLeft = document.getElementById("btnLeft") as HTMLButtonElement;
+  const btnRight = document.getElementById("btnRight") as HTMLButtonElement;
+
+  btnUp.addEventListener("click", () => movePlayer("up"));
+  btnDown.addEventListener("click", () => movePlayer("down"));
+  btnLeft.addEventListener("click", () => movePlayer("left"));
+  btnRight.addEventListener("click", () => movePlayer("right"));
+}
+
+// Update player's location
+function updatePlayerLocation(lat: number, lng: number): void {
+  const newLocation = leaflet.latLng(lat, lng);
+  playerMarker.setLatLng(newLocation); // Move the player marker
+  map.setView(newLocation); // Center map to new location
+
+  // Update the global currentLocation reference
+  currentLocation.lat = lat;
+  currentLocation.lng = lng;
+
+  // Update other elements tied to player location
+  updateCacheVisibility();
+  updatePlayerRadiusVisualization();
+
+  // Regenerate caches based on the new location
+  generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
+}
+
+// Update player's location using discrete movement
+function movePlayer(direction: "up" | "down" | "left" | "right"): void {
+  const currentLatLng = playerMarker.getLatLng();
+  let newLatLng;
+
   switch (direction) {
     case "up":
-      newLocation = leaflet.latLng(
-        currentLocation.lat + TILE_SIZE,
-        currentLocation.lng,
-        updateCacheVisibility(),
-        updatePlayerRadiusVisualization(),
+      newLatLng = leaflet.latLng(
+        currentLatLng.lat + TILE_SIZE,
+        currentLatLng.lng,
       );
       break;
     case "down":
-      newLocation = leaflet.latLng(
-        currentLocation.lat - TILE_SIZE,
-        currentLocation.lng,
-        updateCacheVisibility(),
-        updatePlayerRadiusVisualization(),
+      newLatLng = leaflet.latLng(
+        currentLatLng.lat - TILE_SIZE,
+        currentLatLng.lng,
       );
       break;
     case "left":
-      newLocation = leaflet.latLng(
-        currentLocation.lat,
-        currentLocation.lng - TILE_SIZE,
-        updateCacheVisibility(),
-        updatePlayerRadiusVisualization(),
+      newLatLng = leaflet.latLng(
+        currentLatLng.lat,
+        currentLatLng.lng - TILE_SIZE,
       );
       break;
     case "right":
-      newLocation = leaflet.latLng(
-        currentLocation.lat,
-        currentLocation.lng + TILE_SIZE,
-        updateCacheVisibility(),
-        updatePlayerRadiusVisualization(),
+      newLatLng = leaflet.latLng(
+        currentLatLng.lat,
+        currentLatLng.lng + TILE_SIZE,
       );
       break;
   }
 
-  // Update the player's location and the radius circle
-  playerMarker.setLatLng(newLocation);
-  map.setView(newLocation);
+  // Update the player's position
+  playerMarker.setLatLng(newLatLng);
+  map.setView(newLatLng);
 
-  // Update the player's radius circle visualization
-  currentLocation = newLocation;
-  //updatePlayerRadiusVisualization();
+  // Update global currentLocation
+  currentLocation.lat = newLatLng.lat;
+  currentLocation.lng = newLatLng.lng;
 
-  // Regenerate caches based on the new player location
+  // Update visibility and radius visualization
+  updateCacheVisibility();
+  updatePlayerRadiusVisualization();
+  updateMovementHistory(currentLocation.lat, currentLocation.lng);
+
+  // Regenerate caches based on the new location
   generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
+}
+
+// Initialize an array to hold the player's movement history
+const movementHistory: leaflet.LatLng[] = [];
+
+// Create a polyline to display the movement history
+let movementPolyline: leaflet.Polyline;
+
+// Function to update the polyline with new movement
+function updateMovementHistory(lat: number, lng: number): void {
+  // Add the new position to the movement history
+  const newPosition = new leaflet.LatLng(lat, lng);
+  movementHistory.push(newPosition);
+
+  // If the polyline already exists, update it
+  if (movementPolyline) {
+    movementPolyline.setLatLngs(movementHistory);
+  } else {
+    // If it's the first movement, create the polyline
+    movementPolyline = leaflet.polyline(movementHistory, {
+      color: "blue",
+      weight: 3,
+      opacity: 0.5,
+      smoothFactor: 1,
+    }).addTo(map);
+  }
 }
 
 // Call the function to create movement controls when the game loads
@@ -301,12 +420,14 @@ function setupCachePopup(rect: leaflet.Rectangle, geocache: Geocache): void {
   rect.bindPopup(popupDiv);
 }
 
-function collectCoin(
+// Mark collectCoin as async to handle the asynchronous functions
+async function collectCoin(
   geocache: Geocache,
   coin: string,
   rect: leaflet.Rectangle,
 ) {
-  const isRemoved = removeCoin(geocache, coin); // Call the removeCoin function
+  // Use await to wait for the asynchronous removeCoin to complete
+  const isRemoved = await removeCoin(geocache, coin); // Await the promise to resolve
 
   if (isRemoved) {
     playerInventory.push(coin); // Add coin to inventory
@@ -314,16 +435,22 @@ function collectCoin(
     updateCachePopup(rect, geocache); // Refresh popup content to reflect coin removal
   }
 
-  updateInventoryDisplay();
+  updateInventoryDisplay(); // Update the inventory display
 }
 
-function depositCoin(geocache: Geocache, rect: leaflet.Rectangle): void {
+// Mark depositCoin as async to handle the asynchronous functions
+async function depositCoin(
+  geocache: Geocache,
+  rect: leaflet.Rectangle,
+): Promise<void> {
   // Ensure there is at least one coin in the player's inventory
   if (playerInventory.length > 0) {
     const coinToDeposit = playerInventory.pop(); // Remove the last coin from the inventory
 
     if (coinToDeposit) {
-      const isDeposited = receiveCoin(geocache, coinToDeposit);
+      // Await the promise returned by receiveCoin
+      const isDeposited = await receiveCoin(geocache, coinToDeposit);
+
       if (isDeposited) {
         updateCachePopup(rect, geocache); // Update the popup after depositing
         updateInventoryDisplay(); // Update the inventory display after depositing
