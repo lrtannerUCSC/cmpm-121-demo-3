@@ -312,7 +312,6 @@ const cellState: Map<
 
 // Modify generateCaches to work with cellState
 function generateCaches(radius: number, probability: number): void {
-  console.log("generateCaches called");
   // Function to calculate the Euclidean distance from the center
   const isWithinRadius = (i: number, j: number): boolean => {
     const distance = Math.sqrt(i * i + j * j);
@@ -375,7 +374,6 @@ function spawnCache(
   if (cacheState && cacheState.memento) {
     fromMemento(cache, cacheState.memento); // Restore the cache using memento
 
-    console.log("fromMemento called");
     if (cacheState.cache?.rectangle) {
       // Check if the rectangle is already visible
       if (!rectangleVisibilityMap.has(key)) {
@@ -394,7 +392,6 @@ function spawnCache(
           color: cacheState.cache.rectangle.color || "#28a745",
         });
 
-        console.log("reading rectangle from memento at:", key);
         rectangle.addTo(map);
         rectangleVisibilityMap.set(key, rectangle);
 
@@ -421,7 +418,6 @@ function spawnCache(
       color: cache.rectangle.color,
       weight: 1,
     });
-    console.log("adding new rectangle to cache in spawnCache at:", key);
     rect.addTo(map);
 
     rectangleVisibilityMap.set(key, rect);
@@ -602,7 +598,6 @@ function updateCacheVisibility(): void {
             color: cache.rectangle.color || "green",
           });
 
-          console.log("adding rectangle to map from updateCache at:", cellId);
           rectangle.addTo(map);
           rectangleVisibilityMap.set(cellId, rectangle);
           //console.log(`Made rectangle for cache at ${cellId} visible.`);
@@ -614,11 +609,9 @@ function updateCacheVisibility(): void {
           const rectangle = rectangleVisibilityMap.get(cellId);
           if (rectangle) {
             rectangle.remove();
-            console.log(`Removed rectangle for cache at ${cellId}.`);
           }
 
           rectangleVisibilityMap.delete(cellId);
-          console.log(rectangleVisibilityMap);
           cache.visible = false;
         }
       }
@@ -686,8 +679,8 @@ createRadiusToggleButton();
 const saveButton = document.createElement("button");
 saveButton.textContent = "Save Game";
 saveButton.style.position = "absolute";
-saveButton.style.bottom = "50px";
-saveButton.style.left = "10px";
+saveButton.style.bottom = "100px";
+saveButton.style.right = "10px";
 document.body.appendChild(saveButton);
 
 // Reset button to reset the game state
@@ -700,43 +693,66 @@ document.body.appendChild(resetButton);
 
 function saveGameState() {
   try {
-    console.log("Saving game state...");
+    console.log("Starting to save game state...");
 
-    // Try serializing each part separately
-    let currentLocationStr: string;
-    let playerInventoryStr: string;
-    let cellStateStr: string;
-    let movementHistoryStr: string;
-
-    // Check currentLocation
+    // Top-level debug: currentLocation
+    let currentLocationStr = ""; // Fallback value
     try {
       currentLocationStr = JSON.stringify(currentLocation);
-      console.log("currentLocation serialized:", currentLocationStr);
+      console.log("Serialized currentLocation:", currentLocationStr);
     } catch (error) {
-      console.error("Error serializing currentLocation:", error);
+      console.error(
+        "Error serializing currentLocation:",
+        error,
+        currentLocation,
+      );
     }
 
-    // Check playerInventory
+    // Top-level debug: playerInventory
+    let playerInventoryStr = ""; // Fallback value
     try {
       playerInventoryStr = JSON.stringify(playerInventory);
-      console.log("playerInventory serialized:", playerInventoryStr);
+      console.log("Serialized playerInventory:", playerInventoryStr);
     } catch (error) {
-      console.error("Error serializing playerInventory:", error);
+      console.error(
+        "Error serializing playerInventory:",
+        error,
+        playerInventory,
+      );
     }
 
-    // Check cellState
+    // Top-level debug: cellState
+    let cellStateStr = "[]"; // Fallback value for an empty array
     try {
-      // Convert Map to Array
-      const cellStateArray = Array.from(cellState);
+      const cellStateArray = Array.from(cellState.entries()).map(
+        ([key, value]) => {
+          // Serialize cache information, including coordinates
+          const serializedCache = value.cache
+            ? {
+              location: value.cache.location, // Save the coordinates (lat, lng)
+              coins: value.cache.coins,
+            }
+            : undefined;
+
+          console.log("Serialized cell", key, ":", serializedCache);
+
+          return [key, { ...value, cache: serializedCache }];
+        },
+      );
+
       cellStateStr = JSON.stringify(cellStateArray);
-      console.log("cellState serialized:", cellStateStr);
+      console.log("Serialized cellState:", cellStateStr);
     } catch (error) {
-      console.error("Error serializing cellState:", error);
+      console.error(
+        "Error serializing cellState:",
+        error,
+        Array.from(cellState.entries()),
+      );
     }
 
-    // Check movementHistory
+    // Top-level debug: movementHistory
+    let movementHistoryStr = "[]"; // Fallback value for an empty array
     try {
-      // Convert polyline coordinates to plain objects
       const movementHistoryArray = movementPolyline
         ? movementPolyline.getLatLngs().map((latLng: leaflet.LatLng) => ({
           lat: latLng.lat,
@@ -744,54 +760,36 @@ function saveGameState() {
         }))
         : [];
       movementHistoryStr = JSON.stringify(movementHistoryArray);
-      console.log("movementHistory serialized:", movementHistoryStr);
+      console.log("Serialized movementHistory:", movementHistoryStr);
     } catch (error) {
-      console.error("Error serializing movementHistory:", error);
+      console.error(
+        "Error serializing movementHistory:",
+        error,
+        movementPolyline?.getLatLngs(),
+      );
     }
 
-    // If all parts were serialized successfully, we can create the gameState
+    // Construct gameState object
     const gameState: GameState = {
-      currentLocation: {
-        lat: currentLocation.lat,
-        lng: currentLocation.lng,
-      },
-      playerInventory: playerInventory,
-      cellState: Array.from(cellState.entries()).map(([key, value]) => {
-        const savedValue: CellState = {
-          ...value,
-          cache: value.cache
-            ? {
-              rectangle: value.cache.rectangle
-                ? {
-                  // Ensure rectangle is a leaflet.Rectangle object and it has bounds
-                  bounds: value.cache.rectangle instanceof leaflet.Rectangle
-                    ? [
-                      value.cache.rectangle.getBounds().getSouthWest().lat,
-                      value.cache.rectangle.getBounds().getSouthWest().lng,
-                      value.cache.rectangle.getBounds().getNorthEast().lat,
-                      value.cache.rectangle.getBounds().getNorthEast().lng,
-                    ]
-                    : undefined, // Only serialize bounds if it's a valid rectangle
-                  color: value.cache.rectangle instanceof leaflet.Rectangle
-                    ? value.cache.rectangle.options.color
-                    : undefined, // Only serialize color if it's a valid rectangle
-                }
-                : undefined, // Use undefined if no rectangle exists
-              location: value.cache.location,
-              coins: value.cache.coins,
-            }
-            : undefined, // Use undefined if no cache exists
-        };
-        return [key, savedValue];
-      }),
-      movementHistory: movementHistory, // Assuming this is just an array of latLng objects
+      currentLocation: currentLocationStr
+        ? JSON.parse(currentLocationStr)
+        : { lat: 0, lng: 0 }, // Provide default coordinates if serialization fails
+      playerInventory: playerInventoryStr ? JSON.parse(playerInventoryStr) : [], // Default to empty inventory
+      cellState: JSON.parse(cellStateStr), // Already serialized above
+      movementHistory: JSON.parse(movementHistoryStr), // Already serialized above
     };
 
-    // Try saving the game state to localStorage
-    localStorage.setItem("gameState", JSON.stringify(gameState));
-    console.log("Game state saved.");
+    console.log("Constructed gameState:", gameState);
+
+    // Save to localStorage
+    try {
+      localStorage.setItem("gameState", JSON.stringify(gameState));
+      console.log("Game state saved successfully.");
+    } catch (error) {
+      console.error("Error saving to localStorage:", error);
+    }
   } catch (error) {
-    console.error("Error saving game state:", error);
+    console.error("Unexpected error in saveGameState:", error);
   }
 }
 
@@ -831,7 +829,7 @@ function loadGameState() {
       );
     }
 
-    // Restore cell state
+    // Restore cell state and cache rectangles
     cellState.clear(); // Clear current cell state
     gameState.cellState.forEach(([key, value]: [string, CellState]) => {
       const cellId = key; // Use the key from the saved cell state
@@ -847,26 +845,30 @@ function loadGameState() {
             cache.location.lng,
           );
 
-          // Recreate the rectangle if it exists in the saved state
-          if (cache.rectangle && Array.isArray(cache.rectangle.bounds)) {
-            const [southWestLat, southWestLng, northEastLat, northEastLng] =
-              cache.rectangle.bounds;
-
-            // Create the bounds using the lat, lng values
+          // Check if the cache's cell is discovered
+          if (value.discovered) {
+            // Recreate the rectangle for the discovered cell
             const bounds = leaflet.latLngBounds(
-              leaflet.latLng(southWestLat, southWestLng),
-              leaflet.latLng(northEastLat, northEastLng),
+              leaflet.latLng(cache.location.lat, cache.location.lng),
+              leaflet.latLng(
+                cache.location.lat + TILE_SIZE,
+                cache.location.lng + TILE_SIZE,
+              ),
             );
 
             // Create a new rectangle using the bounds and color
             const rectangle = leaflet.rectangle(bounds, {
-              color: cache.rectangle.color,
+              color: "#28a745",
+              weight: 1,
             });
 
             // Add the rectangle to the map
             rectangle.addTo(map);
 
-            // Store the rectangle in the cache
+            // Bind the cache popup
+            setupCachePopup(rectangle, cache);
+
+            // Store the rectangle back in the cache object
             cache.rectangle = rectangle;
           }
         }
@@ -876,7 +878,7 @@ function loadGameState() {
       }
     });
 
-    // Restore movement history / polyline
+    // Restore movement history / polyline if available
     if (gameState.movementHistory && gameState.movementHistory.length > 0) {
       movementPolyline = leaflet.polyline(gameState.movementHistory).addTo(map);
     }
