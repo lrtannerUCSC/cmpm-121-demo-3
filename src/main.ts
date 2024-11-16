@@ -750,16 +750,41 @@ function saveGameState() {
     }
 
     // If all parts were serialized successfully, we can create the gameState
-    const gameState = {
-      currentLocation: currentLocation,
+    const gameState: GameState = {
+      currentLocation: {
+        lat: currentLocation.lat,
+        lng: currentLocation.lng,
+      },
       playerInventory: playerInventory,
-      cellState: Array.from(cellState), // converting Map to an array of key-value pairs
-      movementHistory: movementPolyline
-        ? movementPolyline.getLatLngs().map((latLng: leaflet.LatLng) => ({
-          lat: latLng.lat,
-          lng: latLng.lng,
-        }))
-        : [], // Save polyline coordinates
+      cellState: Array.from(cellState.entries()).map(([key, value]) => {
+        const savedValue: CellState = {
+          ...value,
+          cache: value.cache
+            ? {
+              rectangle: value.cache.rectangle
+                ? {
+                  // Ensure rectangle is a leaflet.Rectangle object and it has bounds
+                  bounds: value.cache.rectangle instanceof leaflet.Rectangle
+                    ? [
+                      value.cache.rectangle.getBounds().getSouthWest().lat,
+                      value.cache.rectangle.getBounds().getSouthWest().lng,
+                      value.cache.rectangle.getBounds().getNorthEast().lat,
+                      value.cache.rectangle.getBounds().getNorthEast().lng,
+                    ]
+                    : undefined, // Only serialize bounds if it's a valid rectangle
+                  color: value.cache.rectangle instanceof leaflet.Rectangle
+                    ? value.cache.rectangle.options.color
+                    : undefined, // Only serialize color if it's a valid rectangle
+                }
+                : undefined, // Use undefined if no rectangle exists
+              location: value.cache.location,
+              coins: value.cache.coins,
+            }
+            : undefined, // Use undefined if no cache exists
+        };
+        return [key, savedValue];
+      }),
+      movementHistory: movementHistory, // Assuming this is just an array of latLng objects
     };
 
     // Try saving the game state to localStorage
@@ -770,10 +795,23 @@ function saveGameState() {
   }
 }
 
+interface CellState {
+  discovered: boolean;
+  cache?: Geocache;
+  memento?: GeocacheMemento;
+}
+
+interface GameState {
+  currentLocation: { lat: number; lng: number };
+  playerInventory: string[];
+  cellState: [string, CellState][];
+  movementHistory: { lat: number; lng: number }[];
+}
+
 function loadGameState() {
   const savedState = localStorage.getItem("gameState");
   if (savedState) {
-    const gameState = JSON.parse(savedState);
+    const gameState: GameState = JSON.parse(savedState);
 
     // Restore player location
     if (gameState.currentLocation) {
@@ -782,34 +820,65 @@ function loadGameState() {
         gameState.currentLocation.lng,
       );
       playerMarker.setLatLng(currentLocation); // Update player's marker position
+      map.setView(currentLocation); // Ensure the map view is set to the player's location
     }
 
     // Restore player inventory
-    playerInventory.length = 0; // Clear current inventory
-    gameState.playerInventory.forEach((item: string) =>
-      playerInventory.push(item)
-    );
+    if (Array.isArray(gameState.playerInventory)) {
+      playerInventory.length = 0; // Clear the current inventory
+      gameState.playerInventory.forEach((item: string) =>
+        playerInventory.push(item)
+      );
+    }
 
     // Restore cell state
     cellState.clear(); // Clear current cell state
-    gameState.cellState.forEach(([_key, value]: [string, CellState]) => {
-      // Recreate the cache rectangle if it exists
-      if (value.cache && value.cache.rectangle) {
-        const rectangleData = value.cache.rectangle; // The saved rectangle data (e.g., bounds)
+    gameState.cellState.forEach(([key, value]: [string, CellState]) => {
+      const cellId = key; // Use the key from the saved cell state
 
-        // Create the rectangle if it's not already created
-        if (!value.cache.rectangle) {
-          value.cache.rectangle = leaflet.rectangle(rectangleData.bounds, {
-            color: rectangleData.color,
-          });
-          map.addLayer(value.cache.rectangle); // Add the rectangle to the map
+      // Restore the cache for the cell if it exists
+      if (value.cache) {
+        const cache = value.cache;
+
+        // Recreate the cache location (if necessary)
+        if (cache.location) {
+          cache.location = leaflet.latLng(
+            cache.location.lat,
+            cache.location.lng,
+          );
+
+          // Recreate the rectangle if it exists in the saved state
+          if (cache.rectangle && Array.isArray(cache.rectangle.bounds)) {
+            const [southWestLat, southWestLng, northEastLat, northEastLng] =
+              cache.rectangle.bounds;
+
+            // Create the bounds using the lat, lng values
+            const bounds = leaflet.latLngBounds(
+              leaflet.latLng(southWestLat, southWestLng),
+              leaflet.latLng(northEastLat, northEastLng),
+            );
+
+            // Create a new rectangle using the bounds and color
+            const rectangle = leaflet.rectangle(bounds, {
+              color: cache.rectangle.color,
+            });
+
+            // Add the rectangle to the map
+            rectangle.addTo(map);
+
+            // Store the rectangle in the cache
+            cache.rectangle = rectangle;
+          }
         }
+
+        // Rebuild the cell state with the new cache (or any other data)
+        cellState.set(cellId, value);
       }
     });
 
-    // Restore polyline
-    if (gameState.polyline) {
-      movementPolyline = leaflet.polyline(gameState.polyline).addTo(map); // Recreate polyline on the map
+    // Restore movement history / polyline
+    if (gameState.movementHistory && gameState.movementHistory.length > 0) {
+      movementPolyline = leaflet.polyline(gameState.movementHistory).addTo(map);
     }
 
     console.log("Game state loaded.");
