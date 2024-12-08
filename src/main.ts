@@ -14,6 +14,17 @@ import {
   toMemento,
 } from "./geocache.ts";
 
+import {
+  addItemToInventory,
+  clearState,
+  getCurrentLocation,
+  getInventory,
+  removeItemFromInventory,
+  setCellState,
+  setCurrentLocation,
+  state,
+} from "./stateManager.ts";
+
 // Define gameplay constants
 const INITIAL_LOCATION = { lat: 36.98949379578401, lng: -122.06277128548504 };
 const TILE_SIZE = 0.0001;
@@ -122,7 +133,7 @@ function styleButton(button: HTMLButtonElement): void {
   button.style.cursor = "pointer";
 }
 
-let currentLocation = playerMarker.getLatLng();
+//let currentLocation = playerMarker.getLatLng();
 // Function to move the player in a specified direction
 // Add a geolocation toggle button
 const geolocationToggle = document.createElement("button");
@@ -206,8 +217,7 @@ function updatePlayerLocation(lat: number, lng: number): void {
   map.setView(newLocation); // Center map to new location
 
   // Update the global currentLocation reference
-  currentLocation.lat = lat;
-  currentLocation.lng = lng;
+  setCurrentLocation({ lat, lng });
   //generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
 
   // Update other elements tied to player location
@@ -217,6 +227,7 @@ function updatePlayerLocation(lat: number, lng: number): void {
   // Regenerate caches based on the new location
 }
 
+// Update player's location using discrete movement
 // Update player's location using discrete movement
 function movePlayer(direction: "up" | "down" | "left" | "right"): void {
   const currentLatLng = playerMarker.getLatLng();
@@ -251,19 +262,20 @@ function movePlayer(direction: "up" | "down" | "left" | "right"): void {
 
   // Update the player's position
   playerMarker.setLatLng(newLatLng);
-  map.setView(newLatLng);
+  map.setView(newLatLng); // Center map to new location
 
-  // Update global currentLocation
-  currentLocation.lat = newLatLng.lat;
-  currentLocation.lng = newLatLng.lng;
+  // Update the currentLocation in the state manager to the new position
+  setCurrentLocation({ lat: newLatLng.lat, lng: newLatLng.lng });
+
+  // Now updateMovementHistory with the new location
+  updateMovementHistory(newLatLng.lat, newLatLng.lng);
+
+  // Regenerate caches based on the new location
   generateCaches(CACHE_SPAWN_RADIUS, CACHE_SPAWN_PROBABILITY);
 
   // Update visibility and radius visualization
   updateCacheVisibility();
   updatePlayerRadiusVisualization();
-  updateMovementHistory(currentLocation.lat, currentLocation.lng);
-
-  // Regenerate caches based on the new location
 }
 
 // Initialize an array to hold the player's movement history
@@ -296,7 +308,7 @@ function updateMovementHistory(lat: number, lng: number): void {
 createMovementControls();
 
 // Array to hold the player's collected coins
-const playerInventory: string[] = [];
+//const playerInventory: string[] = [];
 
 interface CellState {
   discovered: boolean;
@@ -325,8 +337,9 @@ function generateCaches(radius: number, probability: number): void {
         continue; // Skip if the point is outside the radius
       }
 
-      const cellLat = currentLocation.lat + i * TILE_SIZE;
-      const cellLng = currentLocation.lng + j * TILE_SIZE;
+      const { lat, lng } = getCurrentLocation();
+      const cellLat = lat + i * TILE_SIZE;
+      const cellLng = lng + j * TILE_SIZE;
       const key = `${cellLat.toFixed(5)}:${cellLng.toFixed(5)}`;
 
       // Check if the cell has already been discovered (and thus no cache should be generated)
@@ -365,8 +378,9 @@ function spawnCache(
     [location.lat, location.lng],
     [location.lat + TILE_SIZE, location.lng + TILE_SIZE],
   ];
-  const cellLat = (currentLocation.lat + cell.i * TILE_SIZE).toFixed(5);
-  const cellLng = (currentLocation.lng + cell.j * TILE_SIZE).toFixed(5);
+  const { lat, lng } = getCurrentLocation();
+  const cellLat = (lat + cell.i * TILE_SIZE).toFixed(5);
+  const cellLng = (lng + cell.j * TILE_SIZE).toFixed(5);
   const key = `${cellLat}:${cellLng}`;
 
   // Check for existing cache state with memento
@@ -476,7 +490,7 @@ async function collectCoin(
   const isRemoved = await removeCoin(geocache, coin); // Await the promise to resolve
 
   if (isRemoved) {
-    playerInventory.push(coin); // Add coin to inventory
+    addItemToInventory(coin); // Add coin to inventory
 
     updateCachePopup(rect, geocache); // Refresh popup content to reflect coin removal
   }
@@ -489,14 +503,15 @@ async function depositCoin(
   geocache: Geocache,
   rect: leaflet.Rectangle,
 ): Promise<void> {
-  // Ensure there is at least one coin in the player's inventory
-  if (playerInventory.length > 0) {
-    const coinToDeposit = playerInventory.pop(); // Remove the last coin from the inventory
+  // Use the state manager to get the current inventory
+  const inventory = getInventory(); // Fetch inventory from stateManager
 
+  // Ensure there is at least one coin in the player's inventory
+  if (inventory.length > 0) {
+    const coinToDeposit = removeItemFromInventory(); // Remove the last coin from the inventory
     if (coinToDeposit) {
       // Await the promise returned by receiveCoin
       const isDeposited = await receiveCoin(geocache, coinToDeposit);
-
       if (isDeposited) {
         updateCachePopup(rect, geocache); // Update the popup after depositing
         updateInventoryDisplay(); // Update the inventory display after depositing
@@ -512,8 +527,9 @@ function updateInventoryDisplay(): void {
     console.warn("Inventory display element not found.");
     return;
   }
+  const inventory = getInventory();
   inventoryDiv.innerHTML = "<strong>Player Inventory:</strong>";
-  playerInventory.forEach((coin) => {
+  inventory.forEach((coin) => {
     const coinDiv = document.createElement("div");
     coinDiv.textContent = `Coin ID: ${coin}`;
     inventoryDiv.appendChild(coinDiv);
@@ -566,7 +582,8 @@ function updateCachePopup(rect: leaflet.Rectangle, cache: Geocache): void {
 
 // Function to check if the cache is within the spawn radius using Leaflet's distanceTo method
 function isCacheWithinSpawnRadius(cacheLocation: leaflet.LatLng): boolean {
-  const distance = currentLocation.distanceTo(cacheLocation); // Get the distance in meters
+  const { lat, lng } = getCurrentLocation();
+  const distance = leaflet.latLng(lat, lng).distanceTo(cacheLocation);
   return distance <= CACHE_SPAWN_RADIUS_METERS; // Check if the cache is within the radius
 }
 
@@ -620,7 +637,7 @@ function updateCacheVisibility(): void {
 }
 
 // Add a variable to track the player radius visibility
-let playerRadiusVisible = true;
+let playerRadiusVisible = false;
 let playerRadiusCircle: leaflet.Circle | null = null;
 
 // Function to create the toggle button for player radius visibility
@@ -658,17 +675,21 @@ function togglePlayerRadius(): void {
 
 // Update the function to visualize the player radius when moving
 function updatePlayerRadiusVisualization(): void {
-  if (playerRadiusCircle) {
-    playerRadiusCircle.setLatLng(currentLocation);
-  } else {
-    // Create a new circle if it doesn't exist
-    playerRadiusCircle = leaflet.circle(currentLocation, {
-      radius: CACHE_SPAWN_RADIUS_METERS,
-      color: "blue",
-      weight: 1,
-      opacity: 0.5,
-      fillOpacity: 0.1,
-    }).addTo(map);
+  if (playerRadiusVisible) {
+    const { lat, lng } = getCurrentLocation(); // Get the current location from state manager.
+
+    if (playerRadiusCircle) {
+      playerRadiusCircle.setLatLng({ lat, lng }); // Update the existing circle's position.
+    } else {
+      // Create a new circle if it doesn't exist
+      playerRadiusCircle = leaflet.circle({ lat, lng }, { // Use lat and lng from state manager
+        radius: CACHE_SPAWN_RADIUS_METERS,
+        color: "blue",
+        weight: 1,
+        opacity: 0.5,
+        fillOpacity: 0.1,
+      }).addTo(map);
+    }
   }
 }
 
@@ -695,38 +716,23 @@ function saveGameState() {
   try {
     console.log("Starting to save game state...");
 
-    // Top-level debug: currentLocation
-    let currentLocationStr = ""; // Fallback value
-    try {
-      currentLocationStr = JSON.stringify(currentLocation);
-      console.log("Serialized currentLocation:", currentLocationStr);
-    } catch (error) {
-      console.error(
-        "Error serializing currentLocation:",
-        error,
-        currentLocation,
-      );
-    }
+    // Serialize currentLocation
+    const currentLocation = getCurrentLocation(); // Use stateManager to get current location
+    const currentLocationStr = JSON.stringify(currentLocation);
 
-    // Top-level debug: playerInventory
-    let playerInventoryStr = ""; // Fallback value
-    try {
-      playerInventoryStr = JSON.stringify(playerInventory);
-      console.log("Serialized playerInventory:", playerInventoryStr);
-    } catch (error) {
-      console.error(
-        "Error serializing playerInventory:",
-        error,
-        playerInventory,
-      );
-    }
+    console.log("Serialized currentLocation:", currentLocationStr);
 
-    // Top-level debug: cellState
+    // Serialize playerInventory
+    const playerInventory = getInventory(); // Fetch inventory from stateManager
+    const playerInventoryStr = JSON.stringify(playerInventory);
+
+    console.log("Serialized playerInventory:", playerInventoryStr);
+
+    // Serialize cellState
     let cellStateStr = "[]"; // Fallback value for an empty array
     try {
-      const cellStateArray = Array.from(cellState.entries()).map(
+      const cellStateArray = Array.from(state.cellState.entries()).map(
         ([key, value]) => {
-          // Serialize cache information, including coordinates
           const serializedCache = value.cache
             ? {
               location: value.cache.location, // Save the coordinates (lat, lng)
@@ -735,22 +741,20 @@ function saveGameState() {
             : undefined;
 
           console.log("Serialized cell", key, ":", serializedCache);
-
           return [key, { ...value, cache: serializedCache }];
         },
       );
-
       cellStateStr = JSON.stringify(cellStateArray);
       console.log("Serialized cellState:", cellStateStr);
     } catch (error) {
       console.error(
         "Error serializing cellState:",
         error,
-        Array.from(cellState.entries()),
+        Array.from(state.cellState.entries()),
       );
     }
 
-    // Top-level debug: movementHistory
+    // Serialize movementHistory
     let movementHistoryStr = "[]"; // Fallback value for an empty array
     try {
       const movementHistoryArray = movementPolyline
@@ -771,10 +775,8 @@ function saveGameState() {
 
     // Construct gameState object
     const gameState: GameState = {
-      currentLocation: currentLocationStr
-        ? JSON.parse(currentLocationStr)
-        : { lat: 0, lng: 0 }, // Provide default coordinates if serialization fails
-      playerInventory: playerInventoryStr ? JSON.parse(playerInventoryStr) : [], // Default to empty inventory
+      currentLocation: currentLocation, // Already in serialized form
+      playerInventory: JSON.parse(playerInventoryStr), // Default to empty inventory
       cellState: JSON.parse(cellStateStr), // Already serialized above
       movementHistory: JSON.parse(movementHistoryStr), // Already serialized above
     };
@@ -811,70 +813,65 @@ function loadGameState() {
   if (savedState) {
     const gameState: GameState = JSON.parse(savedState);
 
+    // Clear previous state before loading new data
+    clearState(); // Use the clearState function to reset the state
+
     // Restore player location
     if (gameState.currentLocation) {
-      currentLocation = leaflet.latLng(
-        gameState.currentLocation.lat,
-        gameState.currentLocation.lng,
-      );
-      playerMarker.setLatLng(currentLocation); // Update player's marker position
-      map.setView(currentLocation); // Ensure the map view is set to the player's location
+      const location = {
+        lat: gameState.currentLocation.lat,
+        lng: gameState.currentLocation.lng,
+      };
+      setCurrentLocation(location); // Use stateManager to set the current location
+      const latLng = leaflet.latLng(location.lat, location.lng);
+      playerMarker.setLatLng(latLng); // Update player's marker position
+      map.setView(latLng); // Ensure the map view is set to the player's location
     }
 
     // Restore player inventory
     if (Array.isArray(gameState.playerInventory)) {
-      playerInventory.length = 0; // Clear the current inventory
-      gameState.playerInventory.forEach((item: string) =>
-        playerInventory.push(item)
-      );
+      gameState.playerInventory.forEach((item: string) => {
+        addItemToInventory(item); // Use stateManager to add items to inventory
+      });
     }
 
     // Restore cell state and cache rectangles
-    cellState.clear(); // Clear current cell state
     gameState.cellState.forEach(([key, value]: [string, CellState]) => {
       const cellId = key; // Use the key from the saved cell state
-
       // Restore the cache for the cell if it exists
       if (value.cache) {
         const cache = value.cache;
-
         // Recreate the cache location (if necessary)
         if (cache.location) {
-          cache.location = leaflet.latLng(
+          const cacheLocation = leaflet.latLng(
             cache.location.lat,
             cache.location.lng,
           );
-
           // Check if the cache's cell is discovered
           if (value.discovered) {
             // Recreate the rectangle for the discovered cell
             const bounds = leaflet.latLngBounds(
-              leaflet.latLng(cache.location.lat, cache.location.lng),
+              cacheLocation,
               leaflet.latLng(
-                cache.location.lat + TILE_SIZE,
-                cache.location.lng + TILE_SIZE,
+                cacheLocation.lat + TILE_SIZE,
+                cacheLocation.lng + TILE_SIZE,
               ),
             );
-
             // Create a new rectangle using the bounds and color
             const rectangle = leaflet.rectangle(bounds, {
               color: "#28a745",
               weight: 1,
             });
-
             // Add the rectangle to the map
             rectangle.addTo(map);
-
             // Bind the cache popup
             setupCachePopup(rectangle, cache);
-
             // Store the rectangle back in the cache object
             cache.rectangle = rectangle;
           }
         }
-
         // Rebuild the cell state with the new cache (or any other data)
-        cellState.set(cellId, value);
+        setCellState(cellId, value); // Use stateManager to set cell state
       }
     });
 
@@ -890,38 +887,39 @@ function loadGameState() {
 }
 
 function resetGameState() {
-  console.log("Reseting game state...");
+  console.log("Resetting game state...");
 
   // Clear the game save from localStorage
   localStorage.removeItem("gameSave");
   localStorage.clear();
 
-  // Reset player location to starting point
-  currentLocation = leaflet.latLng(36.98949379578401, -122.06277128548504); // Set initial location
-  playerMarker.setLatLng(currentLocation);
-  map.setView(currentLocation);
+  // Reset player location to starting point using stateManager
+  const initialLocation = { lat: 36.98949379578401, lng: -122.06277128548504 };
+  setCurrentLocation(initialLocation); // Use stateManager to set initial location
+  const initialLatLng = leaflet.latLng(
+    initialLocation.lat,
+    initialLocation.lng,
+  );
 
-  // Reset player inventory
-  playerInventory.length = 0;
+  playerMarker.setLatLng(initialLatLng); // Set the player's marker position
+  map.setView(initialLatLng); // Center the map on the player's initial location
 
-  // Reset cell state and cache visibility
-  cellState.clear();
-  rectangleVisibilityMap.clear();
+  // Instead of handling inventory reset separately, use the clearState function
+  clearState(); // This resets the inventory, cell state, and rectangle visibility map
 
   // Reset movement history
-  movementHistory = [];
+  movementHistory = []; // Assuming this is still a local variable
 
   // Remove any existing layers (e.g., movement polyline, cache rectangles)
   if (movementPolyline) {
     map.removeLayer(movementPolyline);
-    movementPolyline = null;
+    movementPolyline = null; // Reset the reference
   }
 
   console.log("Game state reset.");
 
   // Optional: Reload the page to ensure the reset is clean
-  // To make sure it doesn't restore old state, you can force a full reset by clearing any persistent states
-  self.location.reload();
+  self.location.reload(); // Uncomment if you choose to reload the page
 }
 
 saveButton.addEventListener("click", () => saveGameState());
